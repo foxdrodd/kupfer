@@ -11,6 +11,15 @@ from kupfer.support import pretty
 from kupfer.ui import keybindings
 
 
+def _norm_display_name(name: str) -> str:
+    """Normalize X display name: ':0' and ':0.0' are the same display."""
+    host, sep, num = name.rpartition(":")
+    if not sep:
+        return name
+
+    return f"{host}:{num.partition('.')[0]}"
+
+
 def try_close_unused_displays(screen: Gdk.Screen) -> None:
     """Try to close inactive displays.
 
@@ -77,11 +86,20 @@ class GUIEnvironmentContext:
     def ensure_display_open(cls, display_name: str | None) -> Gdk.Display:
         """Get GdkDisplay for `display_name` or return default if `display_name`
         is None or invalid/unavailable."""
-        # NOTE: display parameter was not supported; added (k)
+        dmgr = Gdk.DisplayManager.get()
+        if not display_name:
+            return dmgr.get_default_display()
+
+        want = _norm_display_name(display_name)
+        for disp in dmgr.list_displays():
+            if not disp.is_closed() and _norm_display_name(disp.get_name()) == want:
+                return disp
+
+        pretty.print_debug(__name__, "Opening display", display_name)
         if disp := Gdk.Display.open(display_name):
             return disp
 
-        return Gdk.DisplayManager.get().get_default_display()
+        return dmgr.get_default_display()
 
     def get_timestamp(self) -> int:
         return self._timestamp
